@@ -1,9 +1,34 @@
 # SPDX-FileCopyrightText: 2022 Claudio Cambra <claudio.cambra@gmail.com>
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-from core.api.v1.plugin import PlatformPluginBase
+from dataclasses import dataclass
+
+import core.definitions
+from core.coredatabase import CoreDatabase
+from core.pluginmanager import PluginManager
 from core.api.v1.post import PostBase
+from core.api.v1.plugin import PlatformPluginBase, BasicPlatformAccount
 import core.api.v1.database as database
+
+@dataclass
+class MastodonAccount(BasicPlatformAccount):
+    """
+    BasicPlatformAccount provides 4 generic fields
+
+        * id = identification number of th account (calculated automatically)
+        * name = name of the account, i.e. something the user can remembr the account
+    by (e.g. "Work Account", "Jokes & Politics", etc.)
+        * username = user name used to log in to the account
+        * password = the password used to log in to the account
+
+    (In that order)
+
+    To add extra fields (and their type) you need to inherit
+    BasicPlatformAccount into a new class and then add your own variables.
+
+    For example, Mastodon needs to now what instance you are gooing to post to, hence...
+    """
+    instance: str
 
 class MastodonPlugin(PlatformPluginBase):
     def __init__(self):
@@ -13,6 +38,7 @@ class MastodonPlugin(PlatformPluginBase):
         self.author_url = ""
         self.description = "A plugin to post to Mastodon :)"
 
+        self.name_field = "name"
         self.username_field = "username"
         self.password_field = "password"
         self.instance_field = "instance"
@@ -21,9 +47,10 @@ class MastodonPlugin(PlatformPluginBase):
     def init_database_data(self):
         self.plugin_table_name = "mastodon_users_table"
         self.table_data_fields = (
+            database.DatabaseFieldDefinition ((self.name_field, "TEXT", "")),
             database.DatabaseFieldDefinition ((self.username_field, "TEXT", "")),
             database.DatabaseFieldDefinition ((self.password_field, "TEXT", "")),
-            database.DatabaseFieldDefinition ((self.instance_field, "TEXT", ""))
+            database.DatabaseFieldDefinition ((self.instance_field, "TEXT", "")),
         )
 
         database.create_plugin_table(self.plugin_table_name, self.table_data_fields)
@@ -56,11 +83,12 @@ class MastodonPlugin(PlatformPluginBase):
         accounts_tuple = []
 
         for account in accounts_data:
-            basic_plat_acc = BasicPlatformAccount(
+            basic_plat_acc = MastodonAccount(
                 account["id"],
+                account[self.name_field],
                 account[self.username_field],
-                account[self.username_field],
-                account[self.password_field]
+                account[self.password_field],
+                account[self.instance_field],
             )
 
             accounts_tuple.append(basic_plat_acc)
@@ -74,17 +102,18 @@ class MastodonPlugin(PlatformPluginBase):
         return tuple(acc_ids)
 
 
-    def account(self, account_id: int) -> BasicPlatformAccount:
+    def account(self, account_id: int) -> MastodonAccount:
         account = database.plugin_data_row(self.plugin_table_name, account_id)
 
         if not account:
             return None
 
-        return BasicPlatformAccount(
+        return MastodonAccount(
             account["id"],
+            account[self.name_field],
             account[self.username_field],
             account[self.password_field],
-            account[self.instance_field]
+            account[self.instance_field],
         )
 
 
@@ -101,6 +130,7 @@ class MastodonPlugin(PlatformPluginBase):
 
 
     def publish_post(self, post: PostBase, account_ids: tuple):
+        pass
         #for acc_id in account_ids:
             #account_details = self.account(acc_id)
 
@@ -118,29 +148,3 @@ class MastodonPlugin(PlatformPluginBase):
         # grab post id from Mastodon
         # record into post table
 
-
-
-# Init singleton instances
-core_db = CoreDatabase.instance(core.definitions.DATABASE_PATH)
-assert core_db
-
-plugin_manager = PluginManager.instance()
-assert plugin_manager
-
-mastodon_plugin = MastodonPlugin()
-mastodon_plugin.init_database_data()
-
-plugin_manager.available_plugins.append(mastodon_plugin)
-
-# Add user
-
-mastodon_user = {mastodon_plugin.username_field: "paul", mastodon_plugin.password_field: "TFWTWTWFTWF", mastodon_plugin.instance_field: "some.instance.social" }
-row_id = mastodon_plugin.add_account (mastodon_user)
-row_data = mastodon_plugin.account (row_id)
-
-print (row_data [0], row_data [1], row_data [2], row_data [3])
-
-#mastodon_test_post = PostBase
-#mastodon_test_post.body = "PB post body!"
-
-#plugin_manager.publish_post(mastodon_test_post, {"mastodon_plugin": (0,1)})
