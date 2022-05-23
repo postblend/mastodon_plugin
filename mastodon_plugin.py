@@ -48,6 +48,10 @@ class MastodonPlugin(PlatformPluginBase):
         self.client_id_field = "client_id"
         self.client_secret_field = "client_secret"
 
+        # Mastodon post table fields
+        self.post_url_field = "link"
+        self.uid_field = "user_id"
+
 
     def init_database_data(self):
         # Get user table ready or create it if it doesn't exist
@@ -58,7 +62,6 @@ class MastodonPlugin(PlatformPluginBase):
             database.DatabaseFieldDefinition ((self.password_field, "TEXT", "")),
             database.DatabaseFieldDefinition ((self.instance_field, "TEXT", "")),
         )
-
         database.create_plugin_table(self.plugin_table_name, self.table_data_fields)
 
         # Get mastodon instance table ready or create it if it doesn't exist
@@ -68,8 +71,15 @@ class MastodonPlugin(PlatformPluginBase):
             database.DatabaseFieldDefinition ((self.client_id_field, "TEXT", "")),
             database.DatabaseFieldDefinition ((self.client_secret_field, "TEXT", ""))
         )
-
         database.create_plugin_table(self.instance_table_name, self.table_instance_data_fields)
+
+        # Get mastodon posts table ready or create it if it doesn't exist
+        self.posts_table_name = "mastodon_links_table"
+        self.table_links_data_fields = (
+            database.DatabaseFieldDefinition ((self.uid_field, "INTEGER", "")),
+            database.DatabaseFieldDefinition ((self.post_url_field, "TEXT", ""))
+        )
+        database.create_plugin_table(self.posts_table_name, self.table_links_data_fields)
 
     def cleanup_database_data(self):
         account_ids = self.account_ids()
@@ -122,9 +132,8 @@ class MastodonPlugin(PlatformPluginBase):
 
 
     def add_account(self, account_details: dict) -> int:
-        # Check to see if the user's instance is already registered and, if not,
-        # add it to the instance table
-
+        # Check to see if the user's instance is already registered
+        # and, if not, add it to the instance table
         if not database.plugin_data_value(self.instance_table_name, self.url_field, account_details[self.instance_field]):
             self.add_instance(account_details[self.instance_field])
 
@@ -151,25 +160,36 @@ class MastodonPlugin(PlatformPluginBase):
 
         database.add_plugin_data(self.instance_table_name, instance_details)
 
-
-
-
     def publish_post(self, post: PostBase, account_ids: tuple):
-        pass
-        #for acc_id in account_ids:
-            #account_details = self.account(acc_id)
+        for acc_id in account_ids:
+            account_details = self.account(acc_id)
+            instance_details = database.plugin_data_value(self.instance_table_name, self.url_field, account_details.instance)
 
-            #if account_details:
-                #print(f"""
-                    #Post for account '{account_details.name}'
+            if account_details:
+                mastodon = Mastodon (
+                            instance_details[self.client_id_field],
+                            instance_details[self.client_secret_field],
+                            api_base_url = "https://" + instance_details[self.url_field]
+                            )
+                mastodon.access_token = mastodon.log_in (
+                            username = account_details.username,
+                            password = account_details.password
+                            )
 
-                    #Post title: {post.title}
-                    #Post body: {post.body}
-                #""")
-            #else:
-                #print(f"Account with id '{acc_id}' does not exist for this plugin.")
+                # Store post location for later reference
+                post_data = mastodon.status_post(post.body)
+                post_details = {
+                    self.uid_field : acc_id,
+                    self.post_url_field : post_data["uri"]
+                    }
+                database.add_plugin_data(self.posts_table_name, post_details)
 
-        # publish post
-        # grab post id from Mastodon
-        # record into post table
+            else:
+                print(f"Account with id '{acc_id}' does not exist for this plugin.")
 
+
+"""
+TODO
+
+* Be able to attach media
+"""
