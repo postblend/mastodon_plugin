@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: 2022 Paul Brown <pbrown@mykolab.com>
 # SPDX-License-Identifier: LGPL-2.1-or-later
+import sys # added!
+sys.path.append("..")
 
 from dataclasses import dataclass
 from mastodon import Mastodon
 
-import core.definitions
 from core.coredatabase import CoreDatabase
 from core.pluginmanager import PluginManager
 from core.api.v1.post import PostBase
