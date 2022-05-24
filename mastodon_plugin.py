@@ -133,12 +133,20 @@ class MastodonPlugin(PlatformPluginBase):
 
 
     def add_account(self, account_details: dict) -> int:
-        # Check to see if the user's instance is already registered
-        # and, if not, add it to the instance table
-        if not database.plugin_data_value(self.instance_table_name, self.url_field, account_details[self.instance_field]):
-            self.add_instance(account_details[self.instance_field])
+        mastodon_instance = account_details[self.instance_field]
+        if not self.instance_in_db(mastodon_instance):
+            self.add_instance(mastodon_instance)
 
         return database.add_plugin_data(self.plugin_table_name, account_details)
+
+
+    def instance_in_db (self, instance_value):
+        return_value = False
+        instance_list = database.plugin_data_values(self.instance_table_name, self.url_field, instance_value)
+        if len(instance_list) > 0:
+            return_value = True
+
+        return return_value
 
 
     def update_account(self, account_id: int, account_details: dict):
